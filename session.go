@@ -20,6 +20,7 @@ type session struct {
 	dataFunc  SessionDataBuilder
 }
 
+// keyPrefix: key prefix in redis
 func NewSession(redis *redis.Client, timeout time.Duration, keyPrefix string, dataFunc SessionDataBuilder) session {
 	return session{redis, timeout, keyPrefix, keyPrefix + "incr", dataFunc}
 }
@@ -48,7 +49,12 @@ func (s session) Get(id string, sessionData interface{}, ttl time.Duration) (new
 	if err != nil {
 		return "", err
 	}
-	return id, s.Set(id, s.dataFunc.New(id), ttl)
+	var v = s.dataFunc.New(id)
+	err = s.dataFunc.Unmarshal(v, &sessionData)
+	if err != nil {
+		return "", err
+	}
+	return id, s.Set(id, sessionData, ttl)
 }
 
 func (s session) newSessionID() (string, error) {
@@ -60,16 +66,20 @@ func (s session) newSessionID() (string, error) {
 	io.ReadFull(rand.Reader, b[:64])
 	binary.BigEndian.PutUint64(b[64:64+8], uint64(time.Now().UnixNano()))
 	binary.BigEndian.PutUint32(b[64+8:], uint32(incr))
-	return base64.URLEncoding.EncodeToString(append([]byte(s.keyPrefix), b...)), nil
+	return s.keyPrefix + base64.URLEncoding.EncodeToString(b), nil
 }
 
 func (s session) getTimeoutCtx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), s.timeout)
 }
 
-func (s session) Set(key string, val string, ttl time.Duration) error {
+func (s session) Set(key string, data interface{}, ttl time.Duration) error {
 	var ctx, cancel = s.getTimeoutCtx()
 	defer cancel()
+	var val, err = s.dataFunc.Marshal(data)
+	if err != nil {
+		return err
+	}
 	return s.redis.SetEX(ctx, key, val, ttl).Err()
 }
 
@@ -77,7 +87,7 @@ func (s session) get(key string, ddl time.Duration) (string, error) {
 	var ctx, cancel = s.getTimeoutCtx()
 	defer cancel()
 	const script = "redis.call('expire',KEYS[1],ARGV[1]) return redis.call('get',KEYS[1])"
-	return s.redis.Eval(ctx, script, []string{s.incrKey}, int(ddl.Seconds())).Text()
+	return s.redis.Eval(ctx, script, []string{key}, int(ddl.Seconds())).Text()
 }
 
 func (s session) incr() (int, error) {
