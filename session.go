@@ -105,3 +105,9 @@ func (s session) Del(key string) error {
 	defer cancel()
 	return s.redis.Del(ctx, key).Err()
 }
+
+func (s session) Expire(key string, ttl time.Duration) error {
+	var ctx, cancel = s.getTimeoutCtx()
+	defer cancel()
+	return s.redis.Expire(ctx, key, ttl).Err()
+}
