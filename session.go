@@ -94,7 +94,7 @@ func (s session) incr() (int, error) {
 	var ctx, cancel = s.getTimeoutCtx()
 	defer cancel()
 	const script = "local v=redis.call('incr',KEYS[1]) if v>4000000000 then redis.call('del',KEYS[1]) end return v"
-	return s.redis.Eval(ctx, script, []string{s.incrKey}, nil).Int()
+	return s.redis.Eval(ctx, script, []string{s.incrKey}).Int()
 }
 
 func (s session) Del(key string) error {
