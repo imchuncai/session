@@ -1,4 +1,4 @@
-module session.imchuncai.com
+module github.com/imchuncai/session
 
 go 1.15
 
